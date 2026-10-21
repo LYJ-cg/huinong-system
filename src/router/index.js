@@ -2,14 +2,19 @@ import { createRouter, createWebHashHistory } from 'vue-router'
 import { useAuthStore } from '@/store/auth'
 
 const routes = [
-  { path: '/', redirect: '/admin/login' },
-  // 管理端登录
-  { path: '/admin/login', name: 'AdminLogin', component: () => import('@/views/admin/Login.vue'), meta: { guest: true } },
-  // 管理端主体
+  // 统一登录入口（三角色同页）
+  { path: '/', name: 'UnifiedLogin', component: () => import('@/views/UnifiedLogin.vue'), meta: { guest: true } },
+  // 兼容旧书签：原三个独立登录页 → 直接重定向到统一入口
+  { path: '/admin/login', redirect: '/' },
+  { path: '/m/login', redirect: '/' },
+  { path: '/buyer/login', redirect: '/' },
+
+  // —————— 管理端主体 ——————
   {
     path: '/admin',
     component: () => import('@/layout/AdminLayout.vue'),
     children: [
+      { path: '', redirect: '/admin/dashboard' },
       { path: 'dashboard', name: 'Dashboard', component: () => import('@/views/admin/Dashboard.vue'), meta: { title: '工作台' } },
       { path: 'farmer', name: 'Farmer', component: () => import('@/views/admin/Farmer.vue'), meta: { title: '农户管理' } },
       { path: 'product', name: 'Product', component: () => import('@/views/admin/Product.vue'), meta: { title: '农产品信息' } },
@@ -24,6 +29,8 @@ const routes = [
       { path: 'warn', name: 'Warn', component: () => import('@/views/admin/StockWarn.vue'), meta: { title: '临期预警' } },
       { path: 'channel', name: 'Channel', component: () => import('@/views/admin/Channel.vue'), meta: { title: '销售渠道' } },
       { path: 'sale-order', name: 'SaleOrder', component: () => import('@/views/admin/SaleOrder.vue'), meta: { title: '销售订单' } },
+      { path: 'buyer-order', name: 'BuyerOrderAudit', component: () => import('@/views/admin/BuyerOrderAudit.vue'), meta: { title: '买方预订审核' } },
+      { path: 'buyer', name: 'Buyer', component: () => import('@/views/admin/Buyer.vue'), meta: { title: '买方档案' } },
       { path: 'price', name: 'Price', component: () => import('@/views/admin/Price.vue'), meta: { title: '指导价/行情' } },
       { path: 'notice', name: 'Notice', component: () => import('@/views/admin/Notice.vue'), meta: { title: '消息通知' } },
       { path: 'statistics', name: 'Statistics', component: () => import('@/views/admin/Statistics.vue'), meta: { title: '统计分析' } },
@@ -31,8 +38,8 @@ const routes = [
       { path: 'sys-log', name: 'SysLog', component: () => import('@/views/admin/SysLog.vue'), meta: { title: '操作日志' } }
     ]
   },
-  // 农户移动端
-  { path: '/m/login', name: 'MobileLogin', component: () => import('@/views/mobile/Login.vue'), meta: { guest: true } },
+
+  // —————— 农户移动端（注册入口保留） ——————
   { path: '/m/register', name: 'MobileRegister', component: () => import('@/views/mobile/Register.vue'), meta: { guest: true } },
   {
     path: '/m',
@@ -46,6 +53,23 @@ const routes = [
       { path: 'notice', name: 'MobileNotice', component: () => import('@/views/mobile/Notice.vue'), meta: { title: '消息通知' } },
       { path: 'me', name: 'MobileMe', component: () => import('@/views/mobile/Me.vue'), meta: { title: '我的' } }
     ]
+  },
+
+  // —————— 买方端（注册入口保留） ——————
+  { path: '/buyer/register', name: 'BuyerRegister', component: () => import('@/views/buyer/Register.vue'), meta: { guest: true } },
+  {
+    path: '/buyer',
+    component: () => import('@/layout/BuyerLayout.vue'),
+    children: [
+      { path: '', name: 'BuyerHome', component: () => import('@/views/buyer/Home.vue'), meta: { title: '首页' } },
+      { path: 'supply', name: 'BuyerSupply', component: () => import('@/views/buyer/Supply.vue'), meta: { title: '供货方' } },
+      { path: 'product', name: 'BuyerProduct', component: () => import('@/views/buyer/Product.vue'), meta: { title: '产品列表' } },
+      { path: 'order/new', name: 'BuyerNewOrder', component: () => import('@/views/buyer/NewOrder.vue'), meta: { title: '提交预订' } },
+      { path: 'orders', name: 'BuyerOrders', component: () => import('@/views/buyer/Orders.vue'), meta: { title: '我的预订' } },
+      { path: 'price', name: 'BuyerPrice', component: () => import('@/views/buyer/Price.vue'), meta: { title: '行情价' } },
+      { path: 'notice', name: 'BuyerNotice', component: () => import('@/views/buyer/Notice.vue'), meta: { title: '消息' } },
+      { path: 'me', name: 'BuyerMe', component: () => import('@/views/buyer/Me.vue'), meta: { title: '买方信息' } }
+    ]
   }
 ]
 
@@ -56,11 +80,16 @@ const router = createRouter({
 
 router.beforeEach((to, from, next) => {
   const auth = useAuthStore()
-  if (to.path.startsWith('/admin') && to.path !== '/admin/login') {
-    if (!auth.isAdmin) return next('/admin/login')
+  // 管理端权限守卫（排除重定向的 /admin/login）
+  if (to.path.startsWith('/admin') && !['/', '/admin/login'].includes(to.path)) {
+    if (!auth.token || !auth.user) return next('/')
+    if (!['SYS', 'ADMIN', 'SALES'].includes(auth.user.role)) return next('/')
   }
-  if (to.path.startsWith('/m/') && to.path !== '/m/login' && to.path !== '/m/register') {
-    if (!auth.isFarmer) return next('/m/login')
+  if (to.path.startsWith('/m') && to.path !== '/m/register') {
+    if (!auth.isFarmer) return next('/')
+  }
+  if (to.path.startsWith('/buyer') && to.path !== '/buyer/register') {
+    if (!auth.isBuyer) return next('/')
   }
   next()
 })

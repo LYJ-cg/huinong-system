@@ -775,3 +775,304 @@ export async function getStatistics() {
     unpaidSaleAmt: unpaidSaleAmt.toFixed(2)
   }
 }
+
+// ============================================================================
+// ============ 买方 Buyer 相关接口 ============
+// ============================================================================
+
+// ============ 买方登录注册 ============
+export async function loginBuyer(username, password) {
+  await delay()
+  const d = db()
+  const u = d.sys_user.find(x => x.username === username && x.password === password && x.role === 'BUYER')
+  if (!u) return { ok: false, msg: '用户名或密码错误' }
+  if (!u.status) return { ok: false, msg: '账号已停用' }
+  const b = d.buyer.find(x => x.phone === u.phone)
+  if (!b) return { ok: false, msg: '买方档案不存在，请联系管理员' }
+  if (b.auth_status !== 1) return { ok: false, msg: '您的账号尚未通过审核，请耐心等待' }
+  const token = 'mock-jwt-buyer-' + u.user_id + '-' + Date.now()
+  return { ok: true, token, user: { ...u, password: undefined }, buyer: b }
+}
+
+export async function registerBuyer(payload) {
+  await delay()
+  const d = db()
+  if (d.sys_user.some(u => u.username === payload.username)) return { ok: false, msg: '用户名已存在' }
+  if (d.buyer.some(b => b.phone === payload.phone)) return { ok: false, msg: '该手机号已注册' }
+  // 买方表
+  const bid = nextId(d, 'buyer')
+  const buyerRec = {
+    buyer_id: bid, buyer_name: payload.buyer_name, short_name: payload.short_name || payload.buyer_name,
+    contact: payload.contact || '', phone: payload.phone, address: payload.address || '',
+    buyer_type: payload.buyer_type || '批发商', credit_level: 2, auth_status: 0,
+    remark: payload.remark || '', create_time: now(), update_time: now()
+  }
+  d.buyer.push(buyerRec)
+  // 同步 sys_user 账号
+  const uid = nextId(d, 'sys_user')
+  d.sys_user.push({
+    user_id: uid, username: payload.username, password: payload.password || '123456',
+    real_name: payload.buyer_name, phone: payload.phone, role: 'BUYER',
+    status: 1, create_time: now(), update_time: now()
+  })
+  commit(d)
+  return { ok: true, buyer_id: bid, msg: '注册成功，等待管理员审核后即可登录' }
+}
+
+// ============ 买方管理（管理端） ============
+export async function listBuyer(params = {}) {
+  await delay()
+  const d = db()
+  let list = [...d.buyer]
+  if (params.keyword) {
+    const kw = params.keyword.trim()
+    list = list.filter(b => b.buyer_name.includes(kw) || b.phone.includes(kw) || (b.contact || '').includes(kw))
+  }
+  if (params.auth_status !== undefined && params.auth_status !== '' && params.auth_status !== null) {
+    list = list.filter(b => b.auth_status === Number(params.auth_status))
+  }
+  list.reverse()
+  return paginate(list, params)
+}
+export async function auditBuyer(id, status, userId) {
+  await delay()
+  const d = db()
+  const b = d.buyer.find(x => x.buyer_id === id)
+  b.auth_status = status
+  b.update_time = now()
+  // 同步 sys_user（买方用 phone 匹配）
+  const u = d.sys_user.find(x => x.role === 'BUYER' && x.phone === b.phone)
+  if (u) u.status = status
+  commit(d)
+  return { ok: true }
+}
+export async function saveBuyer(payload) {
+  await delay()
+  const d = db()
+  if (payload.buyer_id) {
+    const b = d.buyer.find(x => x.buyer_id === payload.buyer_id)
+    Object.assign(b, payload, { update_time: now() })
+    commit(d); return { ok: true }
+  }
+  if (d.buyer.some(b => b.phone === payload.phone)) return { ok: false, msg: '手机号已存在' }
+  const id = nextId(d, 'buyer')
+  d.buyer.push({ ...payload, buyer_id: id, auth_status: payload.auth_status ?? 1, credit_level: payload.credit_level ?? 3, create_time: now(), update_time: now() })
+  commit(d)
+  return { ok: true }
+}
+export async function delBuyer(id) {
+  await delay()
+  const d = db()
+  const b = d.buyer.find(x => x.buyer_id === id)
+  if (b) {
+    d.sys_user = d.sys_user.filter(u => !(u.role === 'BUYER' && u.phone === b.phone))
+  }
+  d.buyer = d.buyer.filter(x => x.buyer_id !== id)
+  commit(d)
+  return { ok: true }
+}
+
+// ============ 买方预订订单 ============
+// 买方下单（可以选择现有产品或指定新产品 custom_product_name）
+export async function submitBuyerOrder(payload, buyerId) {
+  await delay()
+  const d = db()
+  const b = d.buyer.find(x => x.buyer_id === buyerId)
+  if (!b) return { ok: false, msg: '买方档案不存在' }
+  const id = nextId(d, 'buyer_order')
+  d.buyer_order.push({
+    order_id: id, order_no: genNo('DY'),
+    buyer_id: buyerId, buyer_name: b.buyer_name,
+    product_id: payload.product_id || null, custom_product_name: payload.custom_product_name || null,
+    unit: payload.unit || '斤', quantity: Number(payload.quantity),
+    expected_date: payload.expected_date, expected_price: Number(payload.expected_price) || null,
+    buyer_note: payload.buyer_note || null,
+    audit_status: 0, audit_user: null, audit_time: null,
+    pick_status: 0, sale_id: null, reject_reason: null,
+    create_time: now(), update_time: now()
+  })
+  // 给销售管理员发通知（role=SALES）
+  const salesUsers = d.sys_user.filter(u => u.role === 'SALES')
+  salesUsers.forEach(u => {
+    d.notice.push({
+      notice_id: nextId(d, 'notice'), receiver_type: 3 /*销售管理员*/, receiver_id: u.user_id,
+      notice_type: '买方订单', title: `有新的买方预订单待审核`, is_read: 0,
+      content: `买方 ${b.buyer_name} 提交了订单，请尽快处理。`,
+      create_time: now()
+    })
+  })
+  commit(d)
+  return { ok: true, order_no: d.buyer_order[d.buyer_order.length - 1].order_no }
+}
+
+// 买方订单列表（管理端/买方端通用，buyerId 传入则过滤）
+export async function listBuyerOrder(params = {}) {
+  await delay()
+  const d = db()
+  let list = d.buyer_order.map(o => {
+    // 组装产品信息（有 product_id 则用产品名，否则用自定义名）
+    const prod = o.product_id ? (d.product.find(p => p.product_id === o.product_id) || {}) : {}
+    return {
+      ...o,
+      product_name: prod.product_name || o.custom_product_name || '未指定',
+      category: prod.category || '-',
+      sale_no: o.sale_id ? (d.sale_order.find(s => s.sale_id === o.sale_id) || {}).sale_no : null
+    }
+  })
+  if (params.buyer_id) list = list.filter(o => o.buyer_id === Number(params.buyer_id))
+  if (params.audit_status !== undefined && params.audit_status !== '' && params.audit_status !== null) {
+    list = list.filter(o => o.audit_status === Number(params.audit_status))
+  }
+  list.reverse()
+  return paginate(list, params)
+}
+
+// 销售管理员审核买方订单
+export async function auditBuyerOrder(id, pass, userId, rejectReason = '', priceAdjust) {
+  await delay()
+  const d = db()
+  const o = d.buyer_order.find(x => x.order_id === id)
+  if (o.audit_status !== 0) return { ok: false, msg: '该订单已处理' }
+  if (!pass) {
+    o.audit_status = 2
+    o.reject_reason = rejectReason || '暂无法供应'
+    o.audit_user = userId
+    o.audit_time = now()
+    o.update_time = now()
+    d.notice.push({
+      notice_id: nextId(d, 'notice'), receiver_type: 4 /*买方*/, receiver_id: o.buyer_id,
+      notice_type: '订单反馈', title: '预订订单已被拒绝', is_read: 0,
+      content: `您的订单 ${o.order_no} 未通过审核：${o.reject_reason}`, create_time: now()
+    })
+    commit(d)
+    return { ok: true }
+  }
+
+  // 通过：若系统中有该产品库存 → 直接生成销售订单 + 出库
+  //       若库存不足或无该产品 → 生成收购计划，由收购管理员去农户收
+  o.audit_status = 1
+  o.audit_user = userId
+  o.audit_time = now()
+  o.update_time = now()
+
+  const productId = o.product_id
+  const finalPrice = priceAdjust ?? o.expected_price ?? (productId ? (d.product.find(p => p.product_id === productId) || {}).guide_price : null) ?? 0
+
+  // 若有产品且有库存批次 → 直接走 sale_order
+  if (productId) {
+    const stk = d.stock.filter(s => s.product_id === productId && s.status === 1 && s.quantity > 0)
+      .sort((a, b) => a.in_date.localeCompare(b.in_date)) // FIFO
+    if (stk.length > 0) {
+      let remaining = Number(o.quantity)
+      const batchNos = []
+      for (const s of stk) {
+        if (remaining <= 0) break
+        const deduct = Math.min(Number(s.quantity), remaining)
+        batchNos.push({ warehouse_id: s.warehouse_id, batch_no: s.batch_no, qty: deduct })
+        s.quantity = +(Number(s.quantity) - deduct).toFixed(2)
+        if (s.quantity <= 0) s.status = 0
+        remaining -= deduct
+      }
+      // 生成销售订单（按批次拆分；简化：取首个批次，总数量为买方下单量）
+      const first = batchNos[0]
+      const saleId = nextId(d, 'sale_order')
+      const saleNo = genNo('XS')
+      d.sale_order.push({
+        sale_id: saleId, sale_no: saleNo, channel_id: null /*买方直购*/,
+        product_id: productId, batch_no: first.batch_no,
+        quantity: Number(o.quantity), price: Number(finalPrice),
+        total_amount: +(Number(o.quantity) * Number(finalPrice)).toFixed(2),
+        sale_date: now(), out_status: 0, out_date: null,
+        pay_status: 0, pay_time: null, create_user: userId,
+        create_time: now(), update_time: now()
+      })
+      o.sale_id = saleId
+      // 生成出库单（简化：首批次；多批次场景后续可扩展）
+      d.stock_out.push({
+        out_id: nextId(d, 'stock_out'), out_no: genNo('CK'), sale_id: saleId,
+        warehouse_id: first.warehouse_id, product_id: productId, batch_no: first.batch_no,
+        quantity: Number(o.quantity), out_date: now(), operator_id: userId, create_time: now()
+      })
+      o.pick_status = 2
+      // 若还有缺口 → 生成收购计划
+      if (remaining > 0) {
+        const newBatch = batchNos[batchNos.length - 1]
+        const pid = productId
+        const pqty = Number(o.quantity) - Number(o.quantity) + 0 // 忽略小量缺口
+        d.purchase_plan.push({
+          plan_id: nextId(d, 'purchase_plan'), plan_no: genNo('JH'),
+          product_id: pid, plan_qty: Math.ceil(remaining), plan_date: o.expected_date,
+          create_user: userId, status: 0, remark: `买方订单 ${o.order_no} 缺口收购`,
+          create_time: now(), update_time: now()
+        })
+      }
+    } else {
+      // 无库存 → 生成收购计划
+      d.purchase_plan.push({
+        plan_id: nextId(d, 'purchase_plan'), plan_no: genNo('JH'),
+        product_id: productId, plan_qty: Number(o.quantity), plan_date: o.expected_date,
+        create_user: userId, status: 0, remark: `买方订单 ${o.order_no} 专用收购计划`,
+        create_time: now(), update_time: now()
+      })
+      o.pick_status = 1
+    }
+  } else {
+    // 买方指定了 custom_product_name（系统中还没有该产品）
+    // → 先把它注册进 product 表，再生成收购计划
+    let newProductId = null
+    const exist = d.product.find(p => p.product_name === o.custom_product_name)
+    if (exist) {
+      newProductId = exist.product_id
+      o.product_id = newProductId
+    } else {
+      newProductId = nextId(d, 'product')
+      d.product.push({
+        product_id: newProductId, product_name: o.custom_product_name,
+        category: '新增', unit: o.unit || '斤', shelf_life: 7,
+        guide_price: Number(finalPrice) || 0, status: 1,
+        create_time: now(), update_time: now()
+      })
+      o.product_id = newProductId
+    }
+    d.purchase_plan.push({
+      plan_id: nextId(d, 'purchase_plan'), plan_no: genNo('JH'),
+      product_id: newProductId, plan_qty: Number(o.quantity), plan_date: o.expected_date,
+      create_user: userId, status: 0, remark: `买方预订新种类 ${o.custom_product_name}，请收购管理员统筹`,
+      create_time: now(), update_time: now()
+    })
+    o.pick_status = 1
+  }
+
+  // 通知收购管理员（role=ADMIN）
+  const admins = d.sys_user.filter(u => u.role === 'ADMIN')
+  admins.forEach(u => {
+    d.notice.push({
+      notice_id: nextId(d, 'notice'), receiver_type: 5 /*收购管理员*/, receiver_id: u.user_id,
+      notice_type: '收购任务', title: `新的买方订单收购任务`, is_read: 0,
+      content: `买方 ${o.buyer_name} 预订订单 ${o.order_no} 已通过审核，请按收购计划执行。`,
+      create_time: now()
+    })
+  })
+  // 通知买方
+  d.notice.push({
+    notice_id: nextId(d, 'notice'), receiver_type: 4, receiver_id: o.buyer_id,
+    notice_type: '订单反馈', title: '预订订单已通过', is_read: 0,
+    content: `您的订单 ${o.order_no} 已通过审核，${o.pick_status === 2 ? '库存已安排，请等待交付' : '已安排收购，请耐心等待'}。`,
+    create_time: now()
+  })
+
+  commit(d)
+  return { ok: true, order_no: o.order_no, sale_id: o.sale_id || null, pick_status: o.pick_status }
+}
+
+// 收购管理员：完成收购后，把关联的 buyer_order 状态推进到"已入库"
+export async function linkPickStatus(buyerOrderId, status, userId) {
+  await delay()
+  const d = db()
+  const o = d.buyer_order.find(x => x.order_id === buyerOrderId)
+  if (!o) return { ok: false, msg: '订单不存在' }
+  o.pick_status = Number(status)
+  o.update_time = now()
+  commit(d)
+  return { ok: true }
+}

@@ -1,8 +1,8 @@
 /**
  * 模拟数据库层 - 基于localStorage持久化
- * 对应SQL脚本16张表：farmer/sys_user/product/supply_info/purchase_plan/purchase_order/
+ * 对应SQL脚本18张表：farmer/buyer/sys_user/product/supply_info/purchase_plan/purchase_order/
  * settlement/settlement_item/warehouse/stock/stock_in/channel/sale_order/stock_out/
- * price/notice/sys_log
+ * price/notice/sys_log/buyer_order
  */
 
 const KEY = 'huinong_db_v1'
@@ -34,6 +34,18 @@ function seed() {
     { user_id: 2, username: 'buyer', password: '123456', real_name: '李收购', phone: '13800000002', role: 'ADMIN', status: 1, create_time: '2026-09-01 08:00:00', update_time: '2026-09-01 08:00:00' },
     { user_id: 3, username: 'sale', password: '123456', real_name: '王销售', phone: '13800000003', role: 'SALES', status: 1, create_time: '2026-09-01 08:00:00', update_time: '2026-09-01 08:00:00' }
   ]
+
+  // ========== 新增：买方表 ==========
+  const buyer = [
+    { buyer_id: 1, buyer_name: '北方批发市场', short_name: '北方农批', contact: '刘老板', phone: '13700000001', address: '北方农批市场A区', buyer_type: '批发商', credit_level: 3, auth_status: 1, remark: '长期合作', create_time: '2026-09-01 08:00:00', update_time: '2026-09-01 08:00:00' },
+    { buyer_id: 2, buyer_name: '鲜达商超', short_name: '鲜达', contact: '陈经理', phone: '13700000002', address: '城区连锁超市', buyer_type: '商超', credit_level: 3, auth_status: 1, remark: '', create_time: '2026-09-01 08:00:00', update_time: '2026-09-01 08:00:00' },
+    { buyer_id: 3, buyer_name: '绿源加工厂', short_name: '绿源', contact: '周厂长', phone: '13700000004', address: '工业园B栋', buyer_type: '加工企业', credit_level: 2, auth_status: 0, remark: '新注册待审核', create_time: '2026-10-15 09:00:00', update_time: '2026-10-15 09:00:00' }
+  ]
+  // 买方 sys_user 初始账号（与 buyer 表一一对应，密码 123456，auth_status 决定能否登录）
+  sys_user.push(
+    { user_id: 4, username: 'buyer1', password: '123456', real_name: '北方批发市场', phone: '13700000001', role: 'BUYER', status: 1, create_time: '2026-09-01 08:00:00', update_time: '2026-09-01 08:00:00' },
+    { user_id: 5, username: 'buyer2', password: '123456', real_name: '鲜达商超', phone: '13700000002', role: 'BUYER', status: 1, create_time: '2026-09-01 08:00:00', update_time: '2026-09-01 08:00:00' }
+  )
 
   const farmer = [
     { farmer_id: 1, farmer_name: '张三', phone: '13900000001', id_card: '330102199001011234', address: '青山镇青山村1组', bank_card: '6228480401234567890', auth_status: 1, remark: '种植蔬菜为主', create_time: '2026-09-05 09:00:00', update_time: '2026-09-05 09:00:00' },
@@ -122,15 +134,24 @@ function seed() {
     { log_id: 2, user_id: 3, user_name: '王销售', operation: '创建销售订单 XS20261012000001', method: 'POST /api/sale-order', ip: '192.168.1.20', create_time: '2026-10-12 09:00:00' }
   ]
 
+  // ========== 新增：买方预订订单 ==========
+  // audit_status: 0 待销售审核 / 1 销售审核通过（生成收购计划） / 2 销售审核拒绝
+  // pick_status: 0 待收购 / 1 收购中 / 2 已入库 / 3 已交付给买方
+  const buyer_order = [
+    { order_id: 1, order_no: 'DY20261013000001', buyer_id: 1, buyer_name: '北方批发市场', product_id: 1, custom_product_name: null, unit: '斤', quantity: 500, expected_date: '2026-10-20', expected_price: 3.20, buyer_note: '要求当日新鲜', audit_status: 1, audit_user: 3, audit_time: '2026-10-13 10:00:00', pick_status: 2, sale_id: 1, reject_reason: null, create_time: '2026-10-13 09:00:00', update_time: '2026-10-13 14:00:00' },
+    { order_id: 2, order_no: 'DY20261015000001', buyer_id: 2, buyer_name: '鲜达商超', product_id: null, custom_product_name: '胡萝卜', unit: '斤', quantity: 2000, expected_date: '2026-10-25', expected_price: 2.00, buyer_note: '新上市胡萝卜，有多少收多少', audit_status: 0, audit_user: null, audit_time: null, pick_status: 0, sale_id: null, reject_reason: null, create_time: '2026-10-15 08:30:00', update_time: '2026-10-15 08:30:00' },
+    { order_id: 3, order_no: 'DY20261016000001', buyer_id: 3, buyer_name: '绿源加工厂', product_id: 3, custom_product_name: null, unit: '斤', quantity: 5000, expected_date: '2026-11-01', expected_price: 4.00, buyer_note: '用于果汁加工', audit_status: 2, audit_user: 3, audit_time: '2026-10-16 09:00:00', pick_status: 0, sale_id: null, reject_reason: '供应商资质待完善', create_time: '2026-10-16 08:00:00', update_time: '2026-10-16 09:00:00' }
+  ]
+
   return {
-    sys_user, farmer, product, supply_info, purchase_plan, purchase_order,
+    sys_user, farmer, buyer, product, supply_info, purchase_plan, purchase_order,
     settlement, settlement_item, warehouse, stock, stock_in, channel,
-    sale_order, stock_out, price, notice, sys_log,
+    sale_order, stock_out, price, notice, sys_log, buyer_order,
     seq: {
-      farmer: 4, sys_user: 4, product: 6, supply_info: 4, purchase_plan: 3,
+      farmer: 4, sys_user: 6, product: 6, supply_info: 4, purchase_plan: 3,
       purchase_order: 3, settlement: 2, settlement_item: 2, warehouse: 3,
       stock: 3, stock_in: 3, channel: 5, sale_order: 3, stock_out: 2,
-      price: 6, notice: 4, sys_log: 3
+      price: 6, notice: 4, sys_log: 3, buyer: 4, buyer_order: 4
     }
   }
 }
@@ -171,6 +192,30 @@ function safeSetLocal(data) {
   try { localStorage.setItem(KEY, JSON.stringify(data)) } catch (e) { /* ignore */ }
 }
 
+// 兼容式演进：旧本地数据/远端数据可能没有 buyer、buyer_order 表，自动补齐
+function ensureSchema(d) {
+  const missing = []
+  if (!d.buyer) { d.buyer = []; missing.push('buyer') }
+  if (!d.buyer_order) { d.buyer_order = []; missing.push('buyer_order') }
+  if (!d.seq) d.seq = {}
+  if (missing.length) {
+    // 若之前已有 channel 表数据，把 channel 同步一份成 buyer（auth_status=1）便于平滑升级
+    if (missing.includes('buyer') && Array.isArray(d.channel)) {
+      d.channel.forEach(c => {
+        d.buyer.push({
+          buyer_id: d.seq.buyer = (d.seq.buyer || 0) + 1,
+          buyer_name: c.channel_name, short_name: c.channel_name, contact: c.contact,
+          phone: c.phone, address: c.address, buyer_type: c.channel_type,
+          credit_level: 3, auth_status: c.status ? 1 : 0, remark: '',
+          create_time: d.create_time || now(), update_time: now()
+        })
+      })
+    }
+    missing.forEach(t => { if (!(t in d.seq)) d.seq[t] = 1 })
+  }
+  return missing.length > 0
+}
+
 // 应用启动时初始化：优先远端数据，其次本地缓存，最后种子数据
 export async function initDB() {
   if (!REMOTE) { loadDB(); return false }
@@ -178,6 +223,7 @@ export async function initDB() {
     const remote = await fetchRemote()
     if (remote) {
       _db = remote
+      if (ensureSchema(_db)) { saveDB(_db); await pushRemote(_db) }
     } else {
       _db = safeGetLocal() || seed()
       await pushRemote(_db)
@@ -188,6 +234,7 @@ export async function initDB() {
   } catch (e) {
     console.warn('[共享存储] 初始化失败，已降级为本地模式：', e.message)
     _db = safeGetLocal() || seed()
+    ensureSchema(_db)
     return false
   }
 }

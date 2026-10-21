@@ -27,7 +27,13 @@ export const menus = [
     title: '销售管理', icon: 'Sell', roles: ['SALES', 'SYS'], children: [
       { title: '销售渠道', path: '/admin/channel', roles: ['SALES', 'SYS'] },
       { title: '销售订单', path: '/admin/sale-order', roles: ['SALES', 'SYS'] },
+      { title: '买方预订审核', path: '/admin/buyer-order', roles: ['SALES', 'SYS'] },
       { title: '指导价/行情', path: '/admin/price', roles: '*' }
+    ]
+  },
+  {
+    title: '买方管理', icon: 'User', roles: ['SYS'], children: [
+      { title: '买方档案', path: '/admin/buyer', roles: ['SYS'] }
     ]
   },
   {
