@@ -61,14 +61,14 @@ const routes = [
     path: '/buyer',
     component: () => import('@/layout/BuyerLayout.vue'),
     children: [
-      { path: '', name: 'BuyerHome', component: () => import('@/views/buyer/Home.vue'), meta: { title: '首页' } },
-      { path: 'supply', name: 'BuyerSupply', component: () => import('@/views/buyer/Supply.vue'), meta: { title: '供货方' } },
-      { path: 'product', name: 'BuyerProduct', component: () => import('@/views/buyer/Product.vue'), meta: { title: '产品列表' } },
-      { path: 'order/new', name: 'BuyerNewOrder', component: () => import('@/views/buyer/NewOrder.vue'), meta: { title: '提交预订' } },
-      { path: 'orders', name: 'BuyerOrders', component: () => import('@/views/buyer/Orders.vue'), meta: { title: '我的预订' } },
-      { path: 'price', name: 'BuyerPrice', component: () => import('@/views/buyer/Price.vue'), meta: { title: '行情价' } },
-      { path: 'notice', name: 'BuyerNotice', component: () => import('@/views/buyer/Notice.vue'), meta: { title: '消息' } },
-      { path: 'me', name: 'BuyerMe', component: () => import('@/views/buyer/Me.vue'), meta: { title: '买方信息' } }
+      { path: '', name: 'BuyerHome', component: () => import('@/views/buyer/Home.vue'), meta: { title: '首页', public: true } },
+      { path: 'supply', name: 'BuyerSupply', component: () => import('@/views/buyer/Supply.vue'), meta: { title: '供货方', public: true } },
+      { path: 'product', name: 'BuyerProduct', component: () => import('@/views/buyer/Product.vue'), meta: { title: '产品列表', public: true } },
+      { path: 'order/new', name: 'BuyerNewOrder', component: () => import('@/views/buyer/NewOrder.vue'), meta: { title: '提交预订', guestBlocked: true } },
+      { path: 'orders', name: 'BuyerOrders', component: () => import('@/views/buyer/Orders.vue'), meta: { title: '我的预订', guestBlocked: true } },
+      { path: 'price', name: 'BuyerPrice', component: () => import('@/views/buyer/Price.vue'), meta: { title: '行情价', public: true } },
+      { path: 'notice', name: 'BuyerNotice', component: () => import('@/views/buyer/Notice.vue'), meta: { title: '消息', guestBlocked: true } },
+      { path: 'me', name: 'BuyerMe', component: () => import('@/views/buyer/Me.vue'), meta: { title: '买方信息', guestBlocked: true } }
     ]
   }
 ]
@@ -89,7 +89,9 @@ router.beforeEach((to, from, next) => {
     if (!auth.isFarmer) return next('/')
   }
   if (to.path.startsWith('/buyer') && to.path !== '/buyer/register') {
-    if (!auth.isBuyer) return next('/')
+    // BuyerLayout 允许游客进入（浏览公开页面）；受限页面强制登录
+    const buyerLoggedIn = auth.isBuyer
+    if (!buyerLoggedIn && to.meta.guestBlocked) return next('/')
   }
   next()
 })

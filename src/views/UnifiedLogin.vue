@@ -135,6 +135,13 @@
               立即注册
             </router-link>
           </p>
+
+          <p v-if="activeRole === 'buyer'" class="guest-line">
+            <router-link to="/buyer" class="guest-link">
+              <el-icon><View /></el-icon>
+              先浏览看看 →
+            </router-link>
+          </p>
         </div>
       </main>
     </div>
@@ -145,7 +152,7 @@
 import { ref, reactive, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { UserFilled, Sunny, ShoppingBag, ArrowRight } from '@element-plus/icons-vue'
+import { UserFilled, Sunny, ShoppingBag, ArrowRight, View } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/store/auth'
 
 const router = useRouter()
@@ -560,6 +567,28 @@ async function login() {
 }
 .register-line a:hover {
   text-decoration: underline;
+}
+.guest-line {
+  margin: 14px 0 0;
+  text-align: center;
+}
+.guest-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 18px;
+  font-size: 13px;
+  color: #4a5c53;
+  background: #f3f7f5;
+  border: 1px solid #d9e3dd;
+  border-radius: 20px;
+  text-decoration: none;
+  transition: all .2s;
+}
+.guest-link:hover {
+  color: #12694a;
+  background: #e6f0ea;
+  border-color: #12694a;
 }
 
 @media (max-width: 860px) {
