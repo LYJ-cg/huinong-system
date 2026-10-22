@@ -114,10 +114,20 @@
             登 录
           </el-button>
 
-          <p class="demo-line">
-            演示账号
-            <button type="button" class="demo-link" @click="fillDemo">{{ current.demo }}</button>
-          </p>
+          <div class="demo-line">
+            <span class="demo-label">演示账号</span>
+            <span class="demo-list">
+              <button
+                v-for="d in current.demos"
+                :key="d.label"
+                type="button"
+                class="demo-link"
+                @click="fillDemo(d)"
+              >
+                {{ d.label }}
+              </button>
+            </span>
+          </div>
 
           <p v-if="activeRole !== 'admin'" class="register-line">
             {{ activeRole === 'farmer' ? '还没有农户账号？' : '还没有买方账号？' }}
@@ -142,9 +152,37 @@ const router = useRouter()
 const auth = useAuthStore()
 
 const roles = [
-  { key: 'admin', name: '管理端', desc: '管理员 · 收购 · 销售', icon: UserFilled, demo: 'admin / 123456' },
-  { key: 'farmer', name: '农户端', desc: '发布供货 · 查询结算', icon: Sunny, demo: '张三 / 13900000001' },
-  { key: 'buyer', name: '买方端', desc: '在线预订 · 追踪进度', icon: ShoppingBag, demo: 'buyer1 / 123456' }
+  {
+    key: 'admin',
+    name: '管理端',
+    desc: '管理员 · 收购 · 销售',
+    icon: UserFilled,
+    demos: [
+      { label: '系统管理员 admin', username: 'admin', password: '123456' },
+      { label: '收购管理员 buyer', username: 'buyer', password: '123456' },
+      { label: '销售管理员 sale', username: 'sale', password: '123456' }
+    ]
+  },
+  {
+    key: 'farmer',
+    name: '农户端',
+    desc: '发布供货 · 查询结算',
+    icon: Sunny,
+    demos: [
+      { label: '张三 13900000001', phone: '13900000001', idCard: '330102199001011234' },
+      { label: '李四 13900000002', phone: '13900000002', idCard: '330102199203032345' }
+    ]
+  },
+  {
+    key: 'buyer',
+    name: '买方端',
+    desc: '在线预订 · 追踪进度',
+    icon: ShoppingBag,
+    demos: [
+      { label: '北方批发市场 buyer1', username: 'buyer1', password: '123456' },
+      { label: '鲜达商超 buyer2', username: 'buyer2', password: '123456' }
+    ]
+  }
 ]
 
 const meta = {
@@ -157,7 +195,7 @@ const activeRole = ref('admin')
 const loading = ref(false)
 const current = computed(() => ({
   ...meta[activeRole.value],
-  demo: roles.find(r => r.key === activeRole.value).demo
+  demos: roles.find(r => r.key === activeRole.value).demos
 }))
 
 const adminRef = ref()
@@ -186,16 +224,16 @@ function switchRole(key) {
   activeRole.value = key
 }
 
-function fillDemo() {
+function fillDemo(demo) {
   if (activeRole.value === 'admin') {
-    adminForm.username = 'admin'
-    adminForm.password = '123456'
+    adminForm.username = demo.username
+    adminForm.password = demo.password
   } else if (activeRole.value === 'farmer') {
-    farmerForm.phone = '13900000001'
-    farmerForm.idCard = '330102199001011234'
+    farmerForm.phone = demo.phone
+    farmerForm.idCard = demo.idCard
   } else {
-    buyerForm.username = 'buyer1'
-    buyerForm.password = '123456'
+    buyerForm.username = demo.username
+    buyerForm.password = demo.password
   }
 }
 
@@ -460,23 +498,51 @@ async function login() {
 }
 
 .demo-line {
-  margin: 22px 0 0;
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin: 20px 0 0;
   font-size: 12.5px;
   color: #a3afa9;
-  text-align: center;
+}
+.demo-label {
+  flex: 0 0 auto;
+}
+.demo-list {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px 12px;
 }
 .demo-link {
-  padding: 0 0 0 4px;
+  position: relative;
+  padding: 0;
   font-family: inherit;
   font-size: 12.5px;
   color: #12694a;
   background: none;
   border: none;
-  border-bottom: 1px dashed rgba(18, 105, 74, .45);
   cursor: pointer;
+  transition: color .2s;
 }
 .demo-link:hover {
   color: #0e5c40;
+  text-decoration: underline;
+}
+.demo-link::after {
+  content: '';
+  position: absolute;
+  right: -7px;
+  top: 50%;
+  width: 1px;
+  height: 10px;
+  transform: translateY(-50%);
+  background: #dde3e0;
+}
+.demo-link:last-child::after {
+  display: none;
 }
 
 .register-line {
