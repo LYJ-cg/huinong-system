@@ -194,26 +194,72 @@ function safeSetLocal(data) {
 
 // 兼容式演进：旧本地数据/远端数据可能没有 buyer、buyer_order 表，自动补齐
 function ensureSchema(d) {
-  const missing = []
-  if (!d.buyer) { d.buyer = []; missing.push('buyer') }
-  if (!d.buyer_order) { d.buyer_order = []; missing.push('buyer_order') }
+  const changed = []
+  if (!d.buyer) { d.buyer = []; changed.push('buyer-table') }
+  if (!d.buyer_order) { d.buyer_order = []; changed.push('buyer_order-table') }
+  if (!d.sys_user) { d.sys_user = []; changed.push('sys_user-table') }
   if (!d.seq) d.seq = {}
-  if (missing.length) {
-    // 若之前已有 channel 表数据，把 channel 同步一份成 buyer（auth_status=1）便于平滑升级
-    if (missing.includes('buyer') && Array.isArray(d.channel)) {
-      d.channel.forEach(c => {
-        d.buyer.push({
-          buyer_id: d.seq.buyer = (d.seq.buyer || 0) + 1,
-          buyer_name: c.channel_name, short_name: c.channel_name, contact: c.contact,
-          phone: c.phone, address: c.address, buyer_type: c.channel_type,
-          credit_level: 3, auth_status: c.status ? 1 : 0, remark: '',
-          create_time: d.create_time || now(), update_time: now()
-        })
+
+  // 若之前已有 channel 表数据，把 channel 同步一份成 buyer（auth_status=1）便于平滑升级
+  if (d.channel && d.channel.length > 0 && d.buyer.length === 0) {
+    d.channel.forEach(c => {
+      d.buyer.push({
+        buyer_id: d.seq.buyer = (d.seq.buyer || 0) + 1,
+        buyer_name: c.channel_name, short_name: c.channel_name, contact: c.contact,
+        phone: c.phone, address: c.address, buyer_type: c.channel_type,
+        credit_level: 3, auth_status: c.status ? 1 : 0, remark: '',
+        create_time: d.create_time || now(), update_time: now()
       })
-    }
-    missing.forEach(t => { if (!(t in d.seq)) d.seq[t] = 1 })
+      changed.push('channel→buyer:' + c.channel_id)
+    })
   }
-  return missing.length > 0
+
+  // 补齐买方 sys_user 账号（buyer1 北方批发市场、buyer2 鲜达商超）
+  // 种子买方数据：保证首次升级后即可有可登录账号
+  const seedBuyers = [
+    { username: 'buyer1', buyer_name: '北方批发市场', phone: '13700000001', buyer_type: '批发商' },
+    { username: 'buyer2', buyer_name: '鲜达商超', phone: '13700000002', buyer_type: '商超' }
+  ]
+  seedBuyers.forEach(sb => {
+    let u = d.sys_user.find(x => x.username === sb.username || x.phone === sb.phone)
+    if (!u) {
+      const nextId = Math.max(0, ...d.sys_user.map(x => x.user_id || 0)) + 1
+      d.sys_user.push({
+        user_id: nextId, username: sb.username, password: '123456',
+        real_name: sb.buyer_name, phone: sb.phone, role: 'BUYER', status: 1,
+        create_time: now(), update_time: now()
+      })
+      u = d.sys_user.find(x => x.username === sb.username)
+      changed.push('sys_user+' + sb.username)
+    } else if (u.role !== 'BUYER') {
+      u.role = 'BUYER'; changed.push('sys_user.role→BUYER:' + sb.username)
+    }
+
+    // 同步补齐 buyer 表对应档案
+    let b = d.buyer.find(x => x.phone === sb.phone || x.buyer_name === sb.buyer_name)
+    if (!b) {
+      d.buyer.push({
+        buyer_id: d.seq.buyer = (d.seq.buyer || 0) + 1,
+        buyer_name: sb.buyer_name, short_name: sb.buyer_name,
+        contact: sb.username, phone: sb.phone, address: '',
+        buyer_type: sb.buyer_type, credit_level: 3, auth_status: 1, remark: '系统自动建档',
+        create_time: now(), update_time: now()
+      })
+      changed.push('buyer+' + sb.buyer_name)
+    } else if (b.auth_status !== 1) {
+      b.auth_status = 1; changed.push('buyer.auth_status=1:' + sb.buyer_name)
+    }
+  })
+
+  // 初始化各表自增序列
+  ;['buyer', 'buyer_order', 'sys_user'].forEach(t => {
+    if (!(t in d.seq)) d.seq[t] = 1
+  })
+
+  if (changed.length) {
+    console.info('[ensureSchema] 升级迁移:', changed.join(', '))
+  }
+  return changed.length > 0
 }
 
 // 应用启动时初始化：优先远端数据，其次本地缓存，最后种子数据
