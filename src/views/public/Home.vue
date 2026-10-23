@@ -17,10 +17,13 @@
       </div>
       <div class="banner-side">
         <div class="side-card notice-card">
-          <div class="sc-head"><span>📢</span> 最新公告</div>
-          <ul class="sc-list">
-            <li v-for="n in notices" :key="n.notice_id">{{ n.title }}</li>
-            <li v-if="!notices.length" class="empty">暂无公告</li>
+          <div class="sc-head"><span>📢</span> 采购快讯</div>
+          <ul class="sc-list news-list">
+            <li v-for="n in news" :key="n.key">
+              <span class="news-tag" :class="n.type">{{ n.tag }}</span>
+              <span class="news-text">{{ n.title }}</span>
+            </li>
+            <li v-if="!news.length" class="empty">暂无产品快讯</li>
           </ul>
         </div>
         <div class="side-card stat-card">
@@ -128,13 +131,13 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { Sunny, Box, Timer } from '@element-plus/icons-vue'
-import { listProduct, listPrice, listNotice, listStock } from '@/api'
+import { listProduct, listPrice, listStock } from '@/api'
 
 const router = useRouter()
 
 const products = ref([])
 const prices = ref([])
-const notices = ref([])
+const news = ref([])
 const suppliers = ref([])
 
 const hotProducts = ref([])
@@ -184,9 +187,40 @@ onMounted(async () => {
     }))
     topPrices.value = prices.value.slice(0, 5)
 
-    // 公告
-    const nc = await listNotice({ pageSize: 5 })
-    notices.value = nc.list || []
+    // 采购快讯：只放买方关心的产品信息（到货 / 调价 / 接受预订）
+    const pById = {}
+    products.value.forEach(p => { pById[p.product_id] = p })
+    const list = []
+    // ① 近期到货
+    st.list.filter(s => Number(s.quantity) > 0)
+      .sort((a, b) => (a.in_date < b.in_date ? 1 : -1))
+      .slice(0, 2)
+      .forEach((s, i) => {
+        const p = pById[s.product_id] || {}
+        list.push({
+          key: 'in' + i, type: 'in', tag: '到货',
+          title: `${p.product_name || '产品'}到货 ${Number(s.quantity)}${p.unit || ''}，现货可订`
+        })
+      })
+    // ② 指导价调整（取每个产品最近两条价格记录比较）
+    products.value.forEach(p => {
+      const recs = pl.list.filter(x => x.product_id === p.product_id)
+      if (recs.length < 2) return
+      const now = Number(recs[0].guide_price), prev = Number(recs[1].guide_price)
+      if (!now || now === prev) return
+      list.push({
+        key: 'price' + p.product_id, type: 'price', tag: '调价',
+        title: `${p.product_name} 指导价 ${prev.toFixed(2)} → ${now.toFixed(2)} 元/${p.unit}${now > prev ? '（↑）' : '（↓）'}`
+      })
+    })
+    // ③ 无现货、可预订的产品
+    products.value.filter(p => !byProduct[p.product_id]).slice(0, 2).forEach(p => {
+      list.push({
+        key: 'pre' + p.product_id, type: 'pre', tag: '预订',
+        title: `${p.product_name} 暂无现货，可提前预订，到货优先发货`
+      })
+    })
+    news.value = list.slice(0, 5)
 
     // 供货方（直接用产品里的 farmer 信息）
     const fset = new Map()
@@ -234,6 +268,15 @@ onMounted(async () => {
 .sc-list { list-style: none; margin: 0; padding: 10px 14px; font-size: 13px; line-height: 1.9; color: #555; max-height: 180px; overflow-y: auto; }
 .sc-list li { text-overflow: ellipsis; white-space: nowrap; overflow: hidden; }
 .sc-list li.empty { color: #bbb; font-style: italic; }
+.news-list li { display: flex; align-items: center; gap: 6px; }
+.news-tag {
+  flex: none; font-size: 11px; line-height: 18px; padding: 0 5px; border-radius: 3px;
+  font-weight: 600;
+}
+.news-tag.in { color: #12694a; background: #e8f5ee; }
+.news-tag.price { color: #c4560a; background: #fdf0e3; }
+.news-tag.pre { color: #8a6d1a; background: #fbf6e4; }
+.news-text { flex: 1; text-overflow: ellipsis; white-space: nowrap; overflow: hidden; }
 
 .stat-list { padding: 6px 14px 10px; }
 .stat-item { display: flex; align-items: center; justify-content: space-between; padding: 7px 0; border-bottom: 1px dashed #f0f0f0; font-size: 12.5px; }
