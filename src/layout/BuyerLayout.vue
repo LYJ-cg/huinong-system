@@ -62,7 +62,6 @@
               </span>
               <template #dropdown>
                 <el-dropdown-menu>
-                  <el-dropdown-item command="admin">切换到管理端</el-dropdown-item>
                   <el-dropdown-item command="reset">重置演示数据</el-dropdown-item>
                   <el-dropdown-item command="logout" divided>退出登录</el-dropdown-item>
                 </el-dropdown-menu>
@@ -153,8 +152,6 @@ function onCommand(cmd) {
   if (cmd === 'logout') {
     auth.logout()
     router.push('/buyer/login')
-  } else if (cmd === 'admin') {
-    window.open('#/admin/login', '_blank')
   } else if (cmd === 'reset') {
     ElMessageBox.confirm('重置后将恢复初始演示数据，当前操作数据将被清空，是否继续？', '提示', { type: 'warning' })
       .then(() => { resetDB(); ElMessage.success('已重置演示数据'); setTimeout(() => location.reload(), 600) }).catch(() => {})

@@ -4,3 +4,14 @@
 
 [functions]
   directory = "netlify/functions"
+
+# 前端路由 fallback + API 云函数重写
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/:splat"
+  status = 200
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

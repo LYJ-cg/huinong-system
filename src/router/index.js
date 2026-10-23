@@ -2,14 +2,28 @@ import { createRouter, createWebHashHistory } from 'vue-router'
 import { useAuthStore } from '@/store/auth'
 
 const routes = [
-  // 统一登录入口（三角色同页）
-  { path: '/', name: 'UnifiedLogin', component: () => import('@/views/UnifiedLogin.vue'), meta: { guest: true } },
-  // 兼容旧书签：原三个独立登录页 → 直接重定向到统一入口
-  { path: '/admin/login', redirect: '/' },
-  { path: '/m/login', redirect: '/' },
-  { path: '/buyer/login', redirect: '/' },
+  // ========== 公共浏览区（京东/淘宝风格，所有人可访问） ==========
+  {
+    path: '/',
+    component: () => import('@/layout/PublicLayout.vue'),
+    children: [
+      { path: '', name: 'PublicHome', component: () => import('@/views/public/Home.vue'), meta: { title: '惠农物资管理系统 - 产地直供农产品' } },
+      { path: 'products', name: 'PublicProducts', component: () => import('@/views/public/Products.vue'), meta: { title: '全部商品' } },
+      { path: 'product/:id', name: 'PublicProductDetail', component: () => import('@/views/public/ProductDetail.vue'), meta: { title: '商品详情' } },
+      { path: 'suppliers', name: 'PublicSuppliers', component: () => import('@/views/public/Suppliers.vue'), meta: { title: '供货方名录' } },
+      { path: 'prices', name: 'PublicPrices', component: () => import('@/views/public/Price.vue'), meta: { title: '实时行情价' } }
+    ]
+  },
 
-  // —————— 管理端主体 ——————
+  // ========== 三角色统一登录入口 ==========
+  { path: '/login', name: 'UnifiedLogin', component: () => import('@/views/UnifiedLogin.vue'), meta: { guest: true } },
+  // 兼容旧书签：原三个独立登录页 → 重定向到统一登录
+  { path: '/admin/login', redirect: '/login' },
+  { path: '/m/login', redirect: '/login' },
+  { path: '/buyer/login', redirect: '/login' },
+  { path: '/buyer/register', name: 'BuyerRegister', component: () => import('@/views/buyer/Register.vue'), meta: { guest: true } },
+
+  // ========== 管理端主体 ==========
   {
     path: '/admin',
     component: () => import('@/layout/AdminLayout.vue'),
@@ -39,7 +53,7 @@ const routes = [
     ]
   },
 
-  // —————— 农户移动端（注册入口保留） ——————
+  // ========== 农户移动端（注册入口保留） ==========
   { path: '/m/register', name: 'MobileRegister', component: () => import('@/views/mobile/Register.vue'), meta: { guest: true } },
   {
     path: '/m',
@@ -55,8 +69,7 @@ const routes = [
     ]
   },
 
-  // —————— 买方端（注册入口保留） ——————
-  { path: '/buyer/register', name: 'BuyerRegister', component: () => import('@/views/buyer/Register.vue'), meta: { guest: true } },
+  // ========== 买方端（含游客浏览公开页 + 受限页） ==========
   {
     path: '/buyer',
     component: () => import('@/layout/BuyerLayout.vue'),
@@ -75,23 +88,30 @@ const routes = [
 
 const router = createRouter({
   history: createWebHashHistory(),
-  routes
+  routes,
+  scrollBehavior() { return { top: 0 } }
 })
 
 router.beforeEach((to, from, next) => {
   const auth = useAuthStore()
-  // 管理端权限守卫（排除重定向的 /admin/login）
-  if (to.path.startsWith('/admin') && !['/', '/admin/login'].includes(to.path)) {
-    if (!auth.token || !auth.user) return next('/')
+  // 管理端权限守卫
+  if (to.path.startsWith('/admin')) {
+    if (!auth.token || !auth.user) return next('/login')
     if (!['SYS', 'ADMIN', 'SALES'].includes(auth.user.role)) return next('/')
   }
+  // 农户端守卫
   if (to.path.startsWith('/m') && to.path !== '/m/register') {
-    if (!auth.isFarmer) return next('/')
+    if (!auth.isFarmer) return next('/login')
   }
+  // 买方端：公开页放行，受限页拦截
   if (to.path.startsWith('/buyer') && to.path !== '/buyer/register') {
-    // BuyerLayout 允许游客进入（浏览公开页面）；受限页面强制登录
-    const buyerLoggedIn = auth.isBuyer
-    if (!buyerLoggedIn && to.meta.guestBlocked) return next('/')
+    if (!auth.isBuyer && to.meta.guestBlocked) return next('/login')
+  }
+  // 已登录用户访问登录页 → 跳回对应角色首页
+  if (to.path === '/login' && auth.token) {
+    if (auth.isBuyer) return next('/buyer')
+    if (auth.isFarmer) return next('/m')
+    if (auth.user) return next('/admin')
   }
   next()
 })

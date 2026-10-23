@@ -74,8 +74,8 @@ onMounted(async () => {
     const os = await listBuyerOrder({ buyer_id: buyer.value.buyer_id, pageSize: 100 })
     stats.value.myOrderCount = os.total
     stats.value.pending = os.list.filter(x => x.audit_status === 0).length
-    stats.value.totalBuy = os.list.filter(x => x.pick_status === 2 || x.pick_status === 3)
-      .reduce((s, o) => s + Number(o.quantity) * (o.expected_price || 0), 0).toFixed(2)
+    stats.value.totalBuy = Number(os.list.filter(x => x.pick_status === 2 || x.pick_status === 3)
+      .reduce((s, o) => s + Number(o.quantity) * (o.expected_price || 0), 0).toFixed(2))
     recent.value = os.list.slice(0, 5)
   }
 })

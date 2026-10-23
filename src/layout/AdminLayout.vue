@@ -48,7 +48,6 @@
             </span>
             <template #dropdown>
               <el-dropdown-menu>
-                <el-dropdown-item command="mobile">切换到农户移动端</el-dropdown-item>
                 <el-dropdown-item command="reset">重置演示数据</el-dropdown-item>
                 <el-dropdown-item command="logout" divided>退出登录</el-dropdown-item>
               </el-dropdown-menu>
@@ -99,8 +98,6 @@ function onCommand(cmd) {
   if (cmd === 'logout') {
     auth.logout()
     router.push('/admin/login')
-  } else if (cmd === 'mobile') {
-    window.open('#/m/login', '_blank')
   } else if (cmd === 'reset') {
     ElMessageBox.confirm('重置后将恢复初始演示数据，当前操作数据将被清空，是否继续？', '提示', { type: 'warning' })
       .then(() => {
